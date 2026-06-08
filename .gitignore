@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+
+# Large binary inputs/outputs (keep out of git; they are local samples)
+data/*.mrc
+data/*.rec
+data/*.map
+example/*.stl
+blender/*.blend
+blender/*.blend1
+*.stl
+!example/.gitkeep
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# tomoprint scratch
+*.tomoprint.json
+/tmp_out/

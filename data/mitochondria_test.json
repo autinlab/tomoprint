@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "mode": "slab_mean",
+  "index": 97,
+  "half_thickness": 5,
+  "axis": 0,
+  "bin_factor": 1,
+  "sigma": 3.9999999999999996,
+  "pclip_low": 22.4,
+  "pclip_high": 86.4,
+  "invert": false,
+  "footprint_mm": 200.0,
+  "relief_depth_mm": 2.0,
+  "base_thickness_mm": 2.0,
+  "taubin_iterations": 61,
+  "decimate_percent": 16.0,
+  "source_path": "/home/qtallon/Downloads/YTC009_3_lam11_ts1.mrc_15.83Apx.mrc",
+  "source_dims": [
+    234,
+    960,
+    682
+  ],
+  "voxel_size_a": 15.82800006866455
+}
