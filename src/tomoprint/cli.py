@@ -10,7 +10,14 @@ import typer
 
 from tomoprint.exceptions import TomoprintError
 from tomoprint.io_mrc import load_volume, write_mesh
-from tomoprint.params import FilterParams, GeometryParams, MeshParams, ReduceParams
+from tomoprint.params import (
+    CropParams,
+    FilterParams,
+    GeometryParams,
+    JigsawParams,
+    MeshParams,
+    ReduceParams,
+)
 from tomoprint.pipeline import run_pipeline, suggest_bin_factor
 
 
@@ -33,6 +40,21 @@ def convert(
     relief: Annotated[float, typer.Option(help="relief depth (mm)")] = 6.0,
     base: Annotated[float, typer.Option(help="solid base thickness (mm)")] = 2.0,
     voxel: Annotated[float | None, typer.Option(help="override A/voxel")] = None,
+    # --- crop (rect/ellipse; polygon is GUI-only) ---
+    crop_shape: Annotated[
+        str | None, typer.Option(help="crop ROI shape: rect | ellipse (else no crop)")
+    ] = None,
+    crop_cx: Annotated[float, typer.Option(help="crop centre X (0..1 of width)")] = 0.5,
+    crop_cy: Annotated[float, typer.Option(help="crop centre Y (0..1 of height)")] = 0.5,
+    crop_w: Annotated[float, typer.Option(help="crop width (0..1 of footprint)")] = 1.0,
+    crop_h: Annotated[float, typer.Option(help="crop height (0..1 of footprint)")] = 1.0,
+    # --- jigsaw ---
+    jigsaw: Annotated[bool, typer.Option(help="cut the plate into puzzle pieces")] = False,
+    jigsaw_cols: Annotated[int, typer.Option(help="jigsaw columns")] = 4,
+    jigsaw_rows: Annotated[int, typer.Option(help="jigsaw rows")] = 3,
+    jigsaw_tab: Annotated[float, typer.Option(help="tab size (fraction of cell edge)")] = 0.22,
+    jigsaw_kerf: Annotated[float, typer.Option(help="gap between pieces (mm)")] = 0.2,
+    jigsaw_seed: Annotated[int, typer.Option(help="jigsaw randomization seed")] = 0,
     # --- mesh ---
     taubin: Annotated[int, typer.Option(help="Taubin smoothing iterations")] = 0,
     decimate: Annotated[float | None, typer.Option(help="keep-fraction 0..1")] = None,
@@ -69,6 +91,16 @@ def convert(
             taubin_iterations=taubin, decimate_fraction=decimate,
             decimate_target_faces=decimate_faces, repair=repair,
         )
+        crop_p = None
+        if crop_shape is not None:
+            crop_p = CropParams(
+                enabled=True, shape=crop_shape, cx=crop_cx, cy=crop_cy,
+                width=crop_w, height=crop_h,
+            )
+        jigsaw_p = JigsawParams(
+            enabled=jigsaw, cols=jigsaw_cols, rows=jigsaw_rows,
+            tab_size=jigsaw_tab, kerf_mm=jigsaw_kerf, seed=jigsaw_seed,
+        )
 
         vox = voxel if voxel is not None else header_voxel
 
@@ -76,7 +108,10 @@ def convert(
             if verbose:
                 typer.echo(f"  [{frac:5.0%}] {msg}")
 
-        m, diag = run_pipeline(volume, vox, reduce_p, filt_p, geo_p, mesh_p, _progress)
+        m, diag = run_pipeline(
+            volume, vox, reduce_p, filt_p, geo_p, mesh_p,
+            crop_p=crop_p, jigsaw_p=jigsaw_p, progress=_progress,
+        )
         write_mesh(m, output, file_format=format)
     except TomoprintError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)

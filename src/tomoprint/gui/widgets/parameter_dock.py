@@ -15,6 +15,7 @@ _MODES = [
     ("Max projection", "max"),
 ]
 _BINS = [1, 2, 4, 8]
+_CROP_SHAPES = [("Rectangle", "rect"), ("Ellipse", "ellipse"), ("Polygon", "polygon")]
 
 
 class ParameterDock(QtWidgets.QWidget):
@@ -22,6 +23,10 @@ class ParameterDock(QtWidgets.QWidget):
     heightmap must be recomputed (source/contrast) and False for geometry/mesh-only changes."""
 
     changed = QtCore.Signal(bool)
+    cropEnable = QtCore.Signal(bool)
+    cropShape = QtCore.Signal(str)
+    cropZoom = QtCore.Signal(float)
+    cropReset = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -53,6 +58,36 @@ class ParameterDock(QtWidgets.QWidget):
         self.base = LabeledSlider("Base mm", 0.5, 20.0, 2.0, step=0.5, decimals=1)
         relief = self._group("Relief (mm)", [self.footprint, self.relief, self.base])
 
+        # --- CROP -------------------------------------------------------------------------
+        self.crop_enable = QtWidgets.QCheckBox("Enable crop")
+        self.crop_shape = QtWidgets.QComboBox()
+        for text, data in _CROP_SHAPES:
+            self.crop_shape.addItem(text, data)
+        self.crop_zoom = LabeledSlider("Zoom", 1.0, 8.0, 1.0, step=0.1, decimals=1)
+        self.crop_reset = QtWidgets.QPushButton("Reset region")
+        self.crop_hint = QtWidgets.QLabel(
+            "Drag the region on the left. Polygon: double-click to add, right-click to remove."
+        )
+        self.crop_hint.setWordWrap(True)
+        self.crop_hint.setStyleSheet("color:#888; font-size:10px;")
+        crop = self._group("Crop", [
+            self.crop_enable, self._row("Shape", self.crop_shape), self.crop_zoom,
+            self.crop_reset, self.crop_hint,
+        ])
+
+        # --- JIGSAW -----------------------------------------------------------------------
+        self.jig_enable = QtWidgets.QCheckBox("Cut into puzzle pieces (on export)")
+        self.jig_cols = LabeledSlider("Columns", 1, 16, 4)
+        self.jig_rows = LabeledSlider("Rows", 1, 16, 3)
+        self.jig_tab = LabeledSlider("Tab size", 0.05, 0.45, 0.22, step=0.01, decimals=2)
+        self.jig_kerf = LabeledSlider("Kerf mm", 0.0, 2.0, 0.2, step=0.05, decimals=2)
+        self.jig_seed = LabeledSlider("Seed", 0, 999, 0)
+        self.jig_preview3d = QtWidgets.QCheckBox("Preview pieces in 3D (slower)")
+        jigsaw = self._group("Jigsaw", [
+            self.jig_enable, self.jig_cols, self.jig_rows, self.jig_tab, self.jig_kerf,
+            self.jig_seed, self.jig_preview3d,
+        ])
+
         # --- MESH -------------------------------------------------------------------------
         self.taubin = LabeledSlider("Smooth", 0, 100, 0)
         self.decimate = LabeledSlider("Decimate %", 0, 95, 0)
@@ -60,7 +95,7 @@ class ParameterDock(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        for grp in (source, contrast, relief, mesh):
+        for grp in (source, contrast, crop, relief, jigsaw, mesh):
             layout.addWidget(grp)
         layout.addStretch(1)
 
@@ -72,6 +107,18 @@ class ParameterDock(QtWidgets.QWidget):
         self.mode.currentIndexChanged.connect(self._on_mode_changed)
         self.bin.currentIndexChanged.connect(lambda _i: self._emit(True))
         self.invert.toggled.connect(lambda _b: self._emit(True))
+
+        # crop: enable/shape/zoom/reset drive the panel ROI (handled in MainWindow)
+        self.crop_enable.toggled.connect(self._on_crop_enable)
+        self.crop_shape.currentIndexChanged.connect(self._on_crop_shape)
+        self.crop_zoom.valueChanged.connect(self._on_crop_zoom)
+        self.crop_reset.clicked.connect(lambda: self.cropReset.emit())
+
+        # jigsaw: geometry affects the mesh only (and the 2D overlay), not the heightmap
+        for w in (self.jig_cols, self.jig_rows, self.jig_tab, self.jig_kerf, self.jig_seed):
+            w.valueChanged.connect(lambda _v: self._emit(False))
+        self.jig_enable.toggled.connect(lambda _b: self._emit(False))
+        self.jig_preview3d.toggled.connect(lambda _b: self._emit(False))
 
     # ---- helpers -------------------------------------------------------------------------
     @staticmethod
@@ -102,6 +149,18 @@ class ParameterDock(QtWidgets.QWidget):
         self.half.setEnabled(self.mode.currentData() != "slice")
         self._emit(True)
 
+    def _on_crop_enable(self, on: bool) -> None:
+        if not self._loading:
+            self.cropEnable.emit(on)
+
+    def _on_crop_shape(self, _index: int) -> None:
+        if not self._loading:
+            self.cropShape.emit(self.crop_shape.currentData())
+
+    def _on_crop_zoom(self, value: float) -> None:
+        if not self._loading:
+            self.cropZoom.emit(float(value))
+
     # ---- public API ----------------------------------------------------------------------
     def set_slice_range(self, nz: int) -> None:
         self._loading = True
@@ -124,6 +183,17 @@ class ParameterDock(QtWidgets.QWidget):
         s.base_thickness_mm = float(self.base.value())
         s.taubin_iterations = int(self.taubin.value())
         s.decimate_percent = float(self.decimate.value())
+        # crop: only the dock-owned fields (the ROI geometry is written by the source panel)
+        s.crop_enabled = self.crop_enable.isChecked()
+        s.crop_shape = self.crop_shape.currentData()
+        # jigsaw
+        s.jigsaw_enabled = self.jig_enable.isChecked()
+        s.jigsaw_cols = int(self.jig_cols.value())
+        s.jigsaw_rows = int(self.jig_rows.value())
+        s.jigsaw_tab = float(self.jig_tab.value())
+        s.jigsaw_kerf = float(self.jig_kerf.value())
+        s.jigsaw_seed = int(self.jig_seed.value())
+        s.jigsaw_preview_3d = self.jig_preview3d.isChecked()
 
     def read_from(self, s: ReliefSettings) -> None:
         self._loading = True
@@ -140,5 +210,15 @@ class ParameterDock(QtWidgets.QWidget):
         self.base.set_value(s.base_thickness_mm)
         self.taubin.set_value(s.taubin_iterations)
         self.decimate.set_value(s.decimate_percent)
+        self.crop_enable.setChecked(s.crop_enabled)
+        self.crop_shape.setCurrentIndex(max(0, self.crop_shape.findData(s.crop_shape)))
+        self.crop_zoom.set_value(1.0)
+        self.jig_enable.setChecked(s.jigsaw_enabled)
+        self.jig_cols.set_value(s.jigsaw_cols)
+        self.jig_rows.set_value(s.jigsaw_rows)
+        self.jig_tab.set_value(s.jigsaw_tab)
+        self.jig_kerf.set_value(s.jigsaw_kerf)
+        self.jig_seed.set_value(s.jigsaw_seed)
+        self.jig_preview3d.setChecked(s.jigsaw_preview_3d)
         self.half.setEnabled(s.mode != "slice")
         self._loading = False

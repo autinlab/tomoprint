@@ -8,7 +8,14 @@ write a mesh) and :func:`run_pipeline` (operate on an in-memory volume).
 
 from tomoprint.exceptions import NonManifoldError, TomoprintError, ValidationError
 from tomoprint.heightmap import Heightmap
-from tomoprint.params import FilterParams, GeometryParams, MeshParams, ReduceParams
+from tomoprint.params import (
+    CropParams,
+    FilterParams,
+    GeometryParams,
+    JigsawParams,
+    MeshParams,
+    ReduceParams,
+)
 from tomoprint.pipeline import (
     build_mesh_from_heightmap,
     compute_heightmap_2d,
@@ -23,6 +30,8 @@ __all__ = [
     "FilterParams",
     "GeometryParams",
     "MeshParams",
+    "CropParams",
+    "JigsawParams",
     "Heightmap",
     "run_pipeline",
     "run_from_file",

@@ -28,7 +28,8 @@ class Controller(QtCore.QObject):
         self.settings = ReliefSettings()
         self._volume: np.ndarray | None = None
         self._voxel = 1.0
-        self._hm01: np.ndarray | None = None
+        self._hm01: np.ndarray | None = None  # cropped heightmap that feeds the mesh
+        self._hm_display: np.ndarray | None = None  # full heightmap shown in the source panel
         self._hm_dirty = True
 
         self.pool = QtCore.QThreadPool.globalInstance()
@@ -69,15 +70,22 @@ class Controller(QtCore.QObject):
     def _ensure_heightmap(self) -> bool:
         if not self._hm_dirty and self._hm01 is not None:
             return True
+        reduce_p = self.settings.reduce_params()
+        filt_p = self.settings.filter_params()
+        crop_p = self.settings.crop_params()
         try:
-            self._hm01 = compute_heightmap_2d(
-                self._volume, self.settings.reduce_params(), self.settings.filter_params()
-            )
+            # the panel always shows the FULL heightmap so the crop ROI can be drawn in context;
+            # the mesh consumes the cropped one (with crop-adapted contrast)
+            self._hm_display = compute_heightmap_2d(self._volume, reduce_p, filt_p, None)
+            if crop_p.enabled:
+                self._hm01 = compute_heightmap_2d(self._volume, reduce_p, filt_p, crop_p)
+            else:
+                self._hm01 = self._hm_display
         except Exception as exc:
             self.errorOccurred.emit(f"{type(exc).__name__}: {exc}")
             return False
         self._hm_dirty = False
-        self.heightmapReady.emit(self._hm01)
+        self.heightmapReady.emit(self._hm_display)
         return True
 
     def _dispatch(self) -> None:
@@ -93,9 +101,11 @@ class Controller(QtCore.QObject):
         self._inflight = self._req
         self._running = True
         self._set_busy(1)
+        jigsaw_p = self.settings.jigsaw_params() if self.settings.jigsaw_preview_3d else None
         worker = FnWorker(
             self._inflight, build_mesh_payload, self._hm01,
             self.settings.geometry_params(), self.settings.mesh_params(), self._voxel, PREVIEW_CAP,
+            self.settings.crop_params(), jigsaw_p,
         )
         worker.signals.finished.connect(self._on_preview_finished)
         worker.signals.error.connect(self._on_preview_error)
@@ -131,6 +141,7 @@ class Controller(QtCore.QObject):
             self._req, export_to_file, self._hm01,
             self.settings.geometry_params(), self.settings.mesh_params(), self._voxel,
             str(path), file_format,
+            self.settings.crop_params(), self.settings.jigsaw_params(),
         )
         worker.signals.finished.connect(self._on_export_finished)
         worker.signals.error.connect(self._on_export_error)

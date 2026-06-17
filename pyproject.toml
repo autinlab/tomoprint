@@ -18,6 +18,9 @@ dependencies = [
   "scikit-image>=0.24,<0.27",
   "trimesh>=4.4,<5",
   "fast-simplification>=0.1",
+  "shapely>=2.0,<3",
+  "manifold3d>=2.3",
+  "mapbox-earcut>=1.0",
   "typer>=0.12",
 ]
 

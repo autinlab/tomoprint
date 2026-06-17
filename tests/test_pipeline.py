@@ -2,7 +2,14 @@
 
 import pytest
 
-from tomoprint.params import FilterParams, GeometryParams, MeshParams, ReduceParams
+from tomoprint.params import (
+    CropParams,
+    FilterParams,
+    GeometryParams,
+    JigsawParams,
+    MeshParams,
+    ReduceParams,
+)
 from tomoprint.pipeline import (
     compute_heightmap_2d,
     run_pipeline,
@@ -30,11 +37,46 @@ def test_progress_is_monotonic(synthetic_volume):
     seen: list[float] = []
     run_pipeline(
         synthetic_volume, 8.0, ReduceParams(), FilterParams(), GeometryParams(), MeshParams(),
-        lambda msg, frac: seen.append(frac),
+        progress=lambda msg, frac: seen.append(frac),
     )
     assert seen == sorted(seen)
     assert all(0.0 <= f <= 1.0 for f in seen)
     assert seen[-1] == pytest.approx(1.0)
+
+
+def test_crop_changes_heightmap_shape(synthetic_volume):
+    full = compute_heightmap_2d(synthetic_volume, ReduceParams(), FilterParams())
+    cropped = compute_heightmap_2d(
+        synthetic_volume,
+        ReduceParams(),
+        FilterParams(),
+        CropParams(enabled=True, shape="rect", width=0.5, height=0.5),
+    )
+    assert cropped.shape[0] < full.shape[0] and cropped.shape[1] < full.shape[1]
+
+
+@pytest.mark.slow
+def test_ellipse_crop_yields_watertight_shaped_plate(synthetic_volume):
+    mesh, diag = run_pipeline(
+        synthetic_volume, 8.0, ReduceParams(mode="mean"), FilterParams(),
+        GeometryParams(footprint_mm=100), MeshParams(),
+        crop_p=CropParams(enabled=True, shape="ellipse", width=0.8, height=0.6),
+    )
+    assert diag["watertight"] is True
+    assert mesh.body_count == 1
+    assert mesh.volume > 0
+
+
+@pytest.mark.slow
+def test_jigsaw_yields_multi_body_watertight_mesh(synthetic_volume):
+    mesh, diag = run_pipeline(
+        synthetic_volume, 8.0, ReduceParams(mode="mean"), FilterParams(),
+        GeometryParams(footprint_mm=100), MeshParams(),
+        jigsaw_p=JigsawParams(enabled=True, cols=3, rows=2, seed=0),
+    )
+    assert diag["watertight"] is True
+    assert diag["n_pieces"] == 6
+    assert mesh.body_count == 6
 
 
 def test_suggest_bin_factors():

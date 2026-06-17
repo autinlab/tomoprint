@@ -16,6 +16,8 @@ ReduceMode = Literal["slice", "slab_mean", "min", "mean", "max"]
 REDUCE_MODES: tuple[str, ...] = ("slice", "slab_mean", "min", "mean", "max")
 MeshBackend = Literal["trimesh", "pyvista"]
 MESH_BACKENDS: tuple[str, ...] = ("trimesh", "pyvista")
+CropShape = Literal["rect", "ellipse", "polygon"]
+CROP_SHAPES: tuple[str, ...] = ("rect", "ellipse", "polygon")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,71 @@ class FilterParams:
                 "require 0 <= pclip_low < pclip_high <= 100, got "
                 f"({self.pclip_low}, {self.pclip_high})"
             )
+
+
+@dataclass(frozen=True, slots=True)
+class CropParams:
+    """A 2D region-of-interest applied to the heightmap footprint (the (Y, X) plane).
+
+    Coordinates are normalized fractions in ``[0, 1]`` relative to the *full* reduced heightmap,
+    so a crop survives changes to binning/resolution. For ``rect``/``ellipse`` the region is the
+    axis-aligned box centred at ``(cx, cy)`` with size ``(width, height)``; the ellipse is
+    inscribed in that box. For ``polygon`` the region is the bounding box of ``polygon`` and the
+    outline is the polygon itself. A non-``rect`` shape yields a *shaped* plate (the relief solid
+    is boolean-cut to the outline); ``rect`` is a plain rectangular crop with no boolean.
+    """
+
+    enabled: bool = False
+    shape: CropShape = "rect"
+    cx: float = 0.5
+    cy: float = 0.5
+    width: float = 1.0
+    height: float = 1.0
+    polygon: tuple[tuple[float, float], ...] = ()  # normalized-to-full (x, y) vertices
+
+    def __post_init__(self) -> None:
+        if self.shape not in CROP_SHAPES:
+            raise ValidationError(f"shape must be one of {CROP_SHAPES}, got {self.shape!r}")
+        for name in ("cx", "cy", "width", "height"):
+            v = getattr(self, name)
+            if not (0.0 <= v <= 1.0):
+                raise ValidationError(f"{name} must be in [0, 1], got {v}")
+        if self.width <= 0 or self.height <= 0:
+            raise ValidationError(
+                f"width/height must be > 0, got ({self.width}, {self.height})"
+            )
+        if self.shape == "polygon":
+            if len(self.polygon) < 3:
+                raise ValidationError("polygon crop needs at least 3 vertices")
+            for x, y in self.polygon:
+                if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                    raise ValidationError(f"polygon vertices must be in [0, 1], got ({x}, {y})")
+
+
+@dataclass(frozen=True, slots=True)
+class JigsawParams:
+    """Cut the relief plate into ``cols × rows`` interlocking jigsaw pieces on export."""
+
+    enabled: bool = False
+    cols: int = 4
+    rows: int = 3
+    seed: int = 0
+    tab_size: float = 0.22  # tab depth as a fraction of the cell edge length
+    jitter: float = 0.04  # random jitter of tab position/size (fraction of cell edge)
+    kerf_mm: float = 0.2  # gap between pieces (each piece shrunk by kerf/2) for print fit
+    min_piece_mm2: float = 1.0  # drop sliver pieces smaller than this (curved borders)
+
+    def __post_init__(self) -> None:
+        if self.cols < 1 or self.rows < 1:
+            raise ValidationError(f"cols/rows must be >= 1, got ({self.cols}, {self.rows})")
+        if not (0.0 < self.tab_size < 0.5):
+            raise ValidationError(f"tab_size must be in (0, 0.5), got {self.tab_size}")
+        if self.jitter < 0:
+            raise ValidationError(f"jitter must be >= 0, got {self.jitter}")
+        if self.kerf_mm < 0:
+            raise ValidationError(f"kerf_mm must be >= 0, got {self.kerf_mm}")
+        if self.min_piece_mm2 < 0:
+            raise ValidationError(f"min_piece_mm2 must be >= 0, got {self.min_piece_mm2}")
 
 
 @dataclass(frozen=True, slots=True)

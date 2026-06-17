@@ -96,6 +96,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _wire(self) -> None:
         self.dock_widget.changed.connect(self._on_params_changed)
+        self.dock_widget.cropEnable.connect(self._on_crop_enable)
+        self.dock_widget.cropShape.connect(self._on_crop_shape)
+        self.dock_widget.cropZoom.connect(self.source.set_crop_zoom)
+        self.dock_widget.cropReset.connect(self.source.reset_crop)
+        self.source.cropChanged.connect(self._on_crop_changed)
         self.controller.heightmapReady.connect(self.source.set_heightmap)
         self.controller.meshReady.connect(self._on_mesh_ready)
         self.controller.busyChanged.connect(self.progress.setVisible)
@@ -105,7 +110,32 @@ class MainWindow(QtWidgets.QMainWindow):
     # ---- slots ---------------------------------------------------------------------------
     def _on_params_changed(self, hm_dirty: bool) -> None:
         self.dock_widget.write_into(self.settings)
+        self._refresh_jigsaw_overlay()
         self.controller.update_settings(self.settings, hm_dirty)
+
+    def _refresh_jigsaw_overlay(self) -> None:
+        jig = self.settings.jigsaw_params() if self.settings.jigsaw_enabled else None
+        self.source.set_jigsaw(jig)
+
+    # ---- crop wiring ---------------------------------------------------------------------
+    def _on_crop_enable(self, on: bool) -> None:
+        self.settings.crop_enabled = on
+        self.source.set_crop_enabled(on)  # emits cropChanged -> rebuild
+
+    def _on_crop_shape(self, shape: str) -> None:
+        self.settings.crop_shape = shape
+        self.source.set_crop_shape(shape)  # emits cropChanged -> rebuild
+
+    def _on_crop_changed(self, d: dict) -> None:
+        s = self.settings
+        s.crop_shape = d.get("shape", s.crop_shape)
+        if d.get("shape") == "polygon":
+            s.crop_polygon = d.get("polygon", [])
+        else:
+            s.crop_cx, s.crop_cy = d["cx"], d["cy"]
+            s.crop_w, s.crop_h = d["width"], d["height"]
+        if self.controller.has_volume():
+            self.controller.update_settings(s, hm_dirty=True)
 
     def _open_mrc(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open tomogram", "", _MRC_FILTER)
@@ -131,7 +161,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dims = tuple(volume.shape)
         self._voxel = voxel
         self._export_action.setEnabled(True)
+        self._sync_crop_panel()
         self.controller.set_volume(volume, voxel, path, self.settings)
+
+    def _sync_crop_panel(self) -> None:
+        s = self.settings
+        self.source.apply_crop_settings(
+            s.crop_enabled, s.crop_shape, s.crop_cx, s.crop_cy, s.crop_w, s.crop_h, s.crop_polygon
+        )
+        self._refresh_jigsaw_overlay()
 
     def _on_mesh_ready(self, payload) -> None:
         d = payload.diagnostics
@@ -189,6 +227,7 @@ class MainWindow(QtWidgets.QMainWindow):
         loaded.voxel_size_a = self.settings.voxel_size_a
         self.settings = loaded
         self.dock_widget.read_from(self.settings)
+        self._sync_crop_panel()
         self.status_label.setText(f"Loaded preset {Path(path).name}")
         if self.controller.has_volume():
             self.controller.update_settings(self.settings, hm_dirty=True)

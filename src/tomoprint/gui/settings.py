@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from tomoprint.params import FilterParams, GeometryParams, MeshParams, ReduceParams
+from tomoprint.params import (
+    CropParams,
+    FilterParams,
+    GeometryParams,
+    JigsawParams,
+    MeshParams,
+    ReduceParams,
+)
 
 SCHEMA_VERSION = 1
 
@@ -30,6 +37,22 @@ class ReliefSettings:
     footprint_mm: float = 200.0
     relief_depth_mm: float = 6.0
     base_thickness_mm: float = 2.0
+    # crop (region of interest on the heightmap footprint)
+    crop_enabled: bool = False
+    crop_shape: str = "rect"  # rect | ellipse | polygon
+    crop_cx: float = 0.5
+    crop_cy: float = 0.5
+    crop_w: float = 1.0
+    crop_h: float = 1.0
+    crop_polygon: list[list[float]] = field(default_factory=list)  # normalized [[x, y], ...]
+    # jigsaw puzzle cut
+    jigsaw_enabled: bool = False
+    jigsaw_cols: int = 4
+    jigsaw_rows: int = 3
+    jigsaw_tab: float = 0.22
+    jigsaw_kerf: float = 0.2
+    jigsaw_seed: int = 0
+    jigsaw_preview_3d: bool = False  # apply the (expensive) piece cut in the live 3D preview
     # mesh post-processing
     taubin_iterations: int = 0
     decimate_percent: float = 0.0  # 0 = no decimation; otherwise % triangle reduction
@@ -61,6 +84,27 @@ class ReliefSettings:
         else:
             frac = max(0.05, 1.0 - self.decimate_percent / 100.0)
         return MeshParams(taubin_iterations=self.taubin_iterations, decimate_fraction=frac)
+
+    def crop_params(self) -> CropParams:
+        return CropParams(
+            enabled=self.crop_enabled,
+            shape=self.crop_shape,
+            cx=self.crop_cx,
+            cy=self.crop_cy,
+            width=self.crop_w,
+            height=self.crop_h,
+            polygon=tuple((float(x), float(y)) for x, y in self.crop_polygon),
+        )
+
+    def jigsaw_params(self) -> JigsawParams:
+        return JigsawParams(
+            enabled=self.jigsaw_enabled,
+            cols=self.jigsaw_cols,
+            rows=self.jigsaw_rows,
+            tab_size=self.jigsaw_tab,
+            kerf_mm=self.jigsaw_kerf,
+            seed=self.jigsaw_seed,
+        )
 
     def to_json(self, path: str | Path) -> None:
         data = {"schema_version": SCHEMA_VERSION, **asdict(self)}

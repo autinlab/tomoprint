@@ -12,7 +12,7 @@ import numpy as np
 from PySide6 import QtCore
 
 from tomoprint.io_mrc import write_mesh
-from tomoprint.params import GeometryParams, MeshParams
+from tomoprint.params import CropParams, GeometryParams, JigsawParams, MeshParams
 from tomoprint.pipeline import build_mesh_from_heightmap, suggest_bin_factor
 
 
@@ -34,9 +34,15 @@ def build_mesh_payload(
     meshp: MeshParams,
     voxel: float,
     preview_cap: int | None = None,
+    crop: CropParams | None = None,
+    jigsaw: JigsawParams | None = None,
 ) -> MeshPayload:
     """Build a relief mesh and return it as plain arrays. With ``preview_cap`` set, the heightmap
-    is binned down and smoothing/decimation are skipped for a fast, lower-res preview."""
+    is binned down and smoothing/decimation are skipped for a fast, lower-res preview.
+
+    ``crop`` (the shaped-plate outline) is always applied; ``jigsaw`` is applied only when the
+    caller passes it (the controller passes it for previews only when "preview pieces in 3D" is on).
+    """
     preview = False
     if preview_cap is not None:
         bf = suggest_bin_factor(hm01.shape, preview_cap)
@@ -49,7 +55,7 @@ def build_mesh_payload(
             meshp, taubin_iterations=0, decimate_fraction=None, decimate_target_faces=None
         )
 
-    mesh, diag = build_mesh_from_heightmap(hm01, geo, meshp, voxel)
+    mesh, diag = build_mesh_from_heightmap(hm01, geo, meshp, voxel, crop, jigsaw)
     points = np.asarray(mesh.vertices, dtype=np.float32)
     return MeshPayload(
         points=points,
@@ -68,9 +74,11 @@ def export_to_file(
     voxel: float,
     path: str,
     file_format: str | None,
+    crop: CropParams | None = None,
+    jigsaw: JigsawParams | None = None,
 ) -> dict:
-    """Build the FULL-resolution mesh (with smoothing/decimation) and write it to disk."""
-    mesh, diag = build_mesh_from_heightmap(hm01, geo, meshp, voxel)
+    """Build the FULL-resolution mesh (shape + jigsaw applied) and write it to disk."""
+    mesh, diag = build_mesh_from_heightmap(hm01, geo, meshp, voxel, crop, jigsaw)
     write_mesh(mesh, path, file_format=file_format)
     diag = dict(diag)
     diag["path"] = str(path)

@@ -33,12 +33,17 @@ def downsample_heightmap(hm: np.ndarray, bin_factor: int) -> np.ndarray:
     return np.ascontiguousarray(reduced, dtype=np.float32)
 
 
-def normalize_contrast(hm: np.ndarray, p_low: float, p_high: float) -> np.ndarray:
+def normalize_contrast(
+    hm: np.ndarray, p_low: float, p_high: float, mask: np.ndarray | None = None
+) -> np.ndarray:
     """Percentile-clip to ``[p_low, p_high]`` then rescale to float32 ``[0, 1]``.
 
     Robust to NaNs/infs and to flat input (returns zeros when the percentile range collapses).
+    When ``mask`` is given (a boolean array shaped like ``hm``), the clip percentiles are computed
+    over the in-mask pixels only, so contrast adapts to a cropped shape rather than the full box.
     """
-    finite = hm[np.isfinite(hm)]
+    src = hm[mask] if mask is not None else hm
+    finite = src[np.isfinite(src)]
     if finite.size == 0:
         return np.zeros_like(hm, dtype=np.float32)
     lo = float(np.percentile(finite, p_low))
