@@ -14,7 +14,7 @@
   "base_thickness_mm": 2.0,
   "taubin_iterations": 0,
   "decimate_percent": 0.0,
-  "source_path": "/home/qtallon/Documents/code/tomogram-printer/data/capsid_trim.mrc",
+  "source_path": "/home/qtallon/Documents/code/tomoprint/data/capsid_trim.mrc",
   "source_dims": [
     101,
     121,
