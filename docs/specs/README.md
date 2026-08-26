@@ -35,7 +35,7 @@ Validation should emphasize watertightness, manifold geometry, and reproducibili
 
 ## Control Plane Relationship
 
-RootRoute (`/home/qtallon/Documents/code/scripps-root-route`) owns priority and routing.
-This repo owns the local execution artifacts.
+If the work came from `scripps-rr`, that repo owns priority and routing and this repo
+owns the local execution artifacts. If it is a local need, this file is the whole contract.
 
-If the work came from RootRoute, keep the local spec aligned with the matching item in its `STATE/now.md`.
+Keep the local spec aligned with the matching item in that repo's `STATE/now.md`.
