@@ -28,7 +28,7 @@
   "jigsaw_preview_3d": false,
   "taubin_iterations": 1,
   "decimate_percent": 0.0,
-  "source_path": "/home/qtallon/Documents/collabs/lyumkis/data/pure_cores/cryo_electron_tomography/deconv/Position_3_3_8Apx_trim.mrc",
+  "source_path": "/home/qtallon/Documents/collabs/salk/pure_cores/cryo_electron_tomography/deconv/Position_3_3_8Apx_trim.mrc",
   "source_dims": [
     225,
     1202,
